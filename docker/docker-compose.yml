@@ -1,0 +1,16 @@
+version: '3.3'
+
+services:
+  app:
+    image: ${IMAGE:-bad-companies:latest}
+    links:
+      - mongo
+    environment:
+      - MONGO_ENABLED=true
+      - MONGO_SERVICE_URI=mongodb://mongo:27017/bad-companies
+      - MONGO_COLLECTION=bad-companies
+    ports:
+      - "8080:8080"
+
+  mongo:
+    image: mongo:latest

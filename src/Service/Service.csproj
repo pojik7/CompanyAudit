@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>CompaniesAudit.Service</AssemblyName>
+    <RootNamespace>CompaniesAudit</RootNamespace>
+    <Authors>Vlad Pozhydaev</Authors>
+    <Company>Vlad Pozhydaev</Company>
+    <Product>CompaniesAudit.Service</Product>
+    <PackageTags>Companies audit service</PackageTags>
+  </PropertyGroup>
+
+<ItemGroup>    
+    <PackageReference Include="PipServices3.Commons" Version="3.1.2" />
+    <PackageReference Include="PipServices3.Components" Version="3.1.4" />
+    <PackageReference Include="PipServices3.Container" Version="3.1.1" />
+    <PackageReference Include="PipServices3.Data" Version="3.2.3" />
+    <PackageReference Include="PipServices3.MongoDb" Version="3.3.0" />
+    <PackageReference Include="PipServices3.Rpc" Version="3.3.14" />
+    <PackageReference Include="System.Runtime" Version="4.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Companies.Client" Version="1.0.0" />
+  </ItemGroup>
+
+</Project>

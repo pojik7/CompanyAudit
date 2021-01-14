@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Process": {
+      "commandName": "Project",
+      "commandLineArgs": "-c ../../../../../config/config.yml",
+      "environmentVariables": {
+        "MONGO_HOST": "localhost",
+        "MONGO_PORT": "27017",
+        "MONGO_ENABLED": "true"
+      }
+    }
+  }
+}
