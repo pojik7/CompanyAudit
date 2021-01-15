@@ -1,26 +1,18 @@
 ﻿using Client.Clients.Version1;
 using Companies.Data.Version1;
-using CompanyAudit.Logic;
 using PipServices3.Commons.Config;
-using PipServices3.Commons.Data;
 using PipServices3.Commons.Refer;
 using PipServices3.Commons.Run;
-using PipServices3.Components.Config;
-using PipServices3.Components.Lock;
 using PipServices3.Components.Log;
-using Service.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Net.Mail;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Service.Logic
 {
     public class CompaniesAuditController : IOpenable, IClosable, IConfigurable, IReferenceable
-    {
-        private IBadCompaniesPersistence _persistence;
-        private CompaniesConnector _companiesConnector;
+    {                
         private ICompaniesClientV1 _companiesClient;
         private FixedRateTimer Timer { get; set; } = new FixedRateTimer();
         private Parameters Parameters { get; set; } = new Parameters();
@@ -32,17 +24,13 @@ namespace Service.Logic
         private string subj;
         private string body;
         int interval;
-        int delay;
+        int delay;        
 
         public void SetReferences(IReferences references)
         {
             _logger.SetReferences(references);
             _companiesClient = references.GetOneRequired<ICompaniesClientV1>(
-                new Descriptor("companies-service", "client", "*", "*", "1.0"));
-            _companiesConnector = new CompaniesConnector(_companiesClient);
-            _persistence = references.GetOneRequired<IBadCompaniesPersistence>(
-                new Descriptor("companies-audit", "persistence", "*", "*", "1.0")
-            );
+                new Descriptor("companies-service", "client", "*", "*", "1.0"));              
         }
 
         public void Configure(ConfigParams config)
@@ -53,12 +41,12 @@ namespace Service.Logic
             subj = config.GetAsStringWithDefault("mailsettings.subj", string.Empty);
             body = config.GetAsStringWithDefault("mailsettings.body", string.Empty);
             interval = config.GetAsIntegerWithDefault("intervals.interval", 10000);
-            delay = config.GetAsIntegerWithDefault("intervals.delay", 10000);
+            delay = config.GetAsIntegerWithDefault("intervals.delay", 10000);            
         }
 
         public Task OpenAsync(string correlationId)
         {
-            Timer.Task = new Action(async () => await ExecuteAsync(correlationId, Parameters));
+            Timer.Task = new Action (() => Execute(correlationId, Parameters));
             Timer.Interval = interval;
             Timer.Delay = delay;
             Timer.Start();
@@ -77,46 +65,39 @@ namespace Service.Logic
             return Task.CompletedTask;
         }
 
-        public async Task ExecuteAsync(string correlationId, Parameters parameters)
+        public void Execute(string correlationId, Parameters parameters)
         {
             _logger.Info(correlationId, "Run Task correlationId = {0}", correlationId);
-            await AuditTaskAsync(correlationId);
+            AuditTask(correlationId);
         }
-
-        protected async Task<DataPage<BadCompanyEntity>> GetRecordsAsync(string correlationId, FilterParams filter, PagingParams paging, SortParams sort)
+        
+        private void AuditTask(string correlationId)
         {
-            return await _persistence.GetRecordsAsync(correlationId, filter, paging, sort);
-        }
-
-        public async Task<BadCompanyEntity> CreateRecordAsync(string correlationId, BadCompanyEntity record)
-        {
-            record.Id = record.Id ?? IdGenerator.NextLong();
-
-            return await _persistence.CreateRecordAsync(correlationId, record);
-        }
-
-        private async Task AuditTaskAsync(string correlationId)
-        {
-            var task = _companiesConnector.GetCompaniesAsync(correlationId, new PipServices3.Commons.Data.FilterParams(), new PipServices3.Commons.Data.PagingParams(), new PipServices3.Commons.Data.SortParams());
-            task.Wait();
-            foreach (var company in task.Result.Data)
+            var list = GetCompaniesForCheck(correlationId);
+            foreach (var company in list)
             {
-                if (IsBadCompany(company))
+                if (IsBadCompany(correlationId, company))
                 {
-                    await DoTheBadThings(correlationId, company, "The company classified as BAD company");
+                    DoTheBadThings(correlationId, company, "The company classified as BAD company");
                 }
             }
         }
 
-        public bool IsBadCompany(CompanyV1 company)
+        public List<CompanyV1> GetCompaniesForCheck(string correlationId)
+        {
+            var task = _companiesClient.GetCompaniesAsync(correlationId, new PipServices3.Commons.Data.FilterParams(), new PipServices3.Commons.Data.PagingParams(), new PipServices3.Commons.Data.SortParams());
+            task.Wait();
+            return task.Result.Data;
+        }
+
+        public bool IsBadCompany(string correlationId, CompanyV1 company)
         {
             return company.Name.ToLower().ToLower().Contains("bad");
         }
 
-        private async Task DoTheBadThings(string correlationId, CompanyV1 company, string Note)
+        private void DoTheBadThings(string correlationId, CompanyV1 company, string Note)
         {
             SendEmail(company, Note);
-            await StoreToStorage(correlationId, company, Note);
         }
 
         private void SendEmail(CompanyV1 Company, string Note)
@@ -135,6 +116,12 @@ namespace Service.Logic
 
         }
 
+        private void ShowMessage(CompanyV1 Company, string Note)
+        {
+            body = ProccessTags(body, Company, Note);
+            Console.WriteLine(body);
+        }
+
         public string ProccessTags(string body,CompanyV1 BadCompany, string Note)
         {
             return body.Replace("[BANKCODE]", BadCompany.BankCode).
@@ -145,14 +132,6 @@ namespace Service.Logic
                 Replace("[CONTRACTDATE]", BadCompany.ContractDate.ToString("dd.MM.yyyy")).
                 Replace("[NOTE]", Note).
                 Replace("[EMPLOYEE_ID]", BadCompany.EmployeeId.ToString());
-        }
-
-        public async Task<BadCompanyEntity> StoreToStorage(string correlationId, CompanyV1 company, string Note)
-        {
-            var record = new BadCompanyEntity();
-            record.CompanyId = company.Id;
-            record.Note = Note;
-            return await CreateRecordAsync(correlationId, record);
-        }
+        }   
     }
 }

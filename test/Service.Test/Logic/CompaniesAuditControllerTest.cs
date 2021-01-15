@@ -1,33 +1,17 @@
 ﻿using Client.Clients.Version1;
 using Companies.Data.Version1;
 using PipServices3.Commons.Config;
-using PipServices3.Commons.Data;
 using PipServices3.Commons.Refer;
 using Service.Logic;
-using Service.Persistence;
 using System;
 using System.Globalization;
-using System.Threading.Tasks;
 using Xunit;
 
 namespace Service.Test.Logic
 {
-    public class CompaniesAuditControllerTest : IDisposable
-    {
-        private BadCompanyEntity BadCompany1 = new BadCompanyEntity()
-        {
-            CompanyId = "1",
-            Note = "The company classified as BAD company"
-        };
-
-        private BadCompanyEntity BadCompany2 = new BadCompanyEntity()
-        {
-            CompanyId = "2",
-            Note = "The company classified as BAD company, but..."
-        };
-
-
-        private CompanyV1 Company1 = new CompanyV1()
+    public class CompaniesAuditControllerTest
+    {        
+        CompanyV1 company1 = new CompanyV1()
         {
             AccCode = "2600000001",
             BankCode = "777777",
@@ -40,7 +24,7 @@ namespace Service.Test.Logic
             StateCode = "132456789"
         };
 
-        private CompanyV1 Company2 = new CompanyV1()
+        CompanyV1 company2 = new CompanyV1()
         {
             AccCode = "2600000002",
             BankCode = "888888",
@@ -53,64 +37,89 @@ namespace Service.Test.Logic
             StateCode = "132456780"
         };
 
-        string body = "[BANKCODE][ACCCODE][STATECODE][IBAN][NAME][CONTRACTDATE][NOTE][EMPLOYEE_ID]";
-
         private CompaniesAuditController _controller;
-        private BadCompaniesMemoryPersistence _persistence;
+        private CompaniesHttpClientV1 _client;
+        private bool isIntegratedTestEnable;
 
         public CompaniesAuditControllerTest()
         {
-            _persistence = new BadCompaniesMemoryPersistence();
-            _persistence.Configure(new ConfigParams());
+
+            isIntegratedTestEnable = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("HOST"));
 
             _controller = new CompaniesAuditController();
 
-            var references = References.FromTuples(
-                new Descriptor("companies-audit", "persistence", "memory", "*", "1.0"), _persistence,
-                new Descriptor("companies-audit", "controller", "default", "*", "1.0"), _controller,
-                new Descriptor("companies-service", "client", "null", "default", "1.0"), new CompaniesNullClientV1()
-            );
+            _client = new CompaniesHttpClientV1();
+            _client.Configure(ConfigParams.FromTuples(
+                    ("connection.host", Environment.GetEnvironmentVariable("HOST")),
+                    ("connection.port", Environment.GetEnvironmentVariable("PORT")),
+                    ("connection.protocol", "http")
+                ));           
 
+
+            var references = References.FromTuples(
+                new Descriptor("companies-audit", "controller", "default", "*", "1.0"), _controller,
+                new Descriptor("companies-service", "client", "http", "default", "1.0"), _client
+            );
+                        
             _controller.SetReferences(references);
 
-            _persistence.OpenAsync(null).Wait();
-        }
+            _client.OpenAsync(null).Wait();
 
-        public void Dispose()
+        }
+         
+        [Fact]
+        public void GetCompaniesForCheck()
         {
-            _persistence.CloseAsync(null).Wait();
+            if (isIntegratedTestEnable)
+            {                                
+                _client.CreateCompanyAsync(null, company1).Wait();
+
+                var list = _controller.GetCompaniesForCheck(null);
+
+                Assert.True(list.Count == 1);
+                AssertCompanies(company1, list[0]);
+
+                _client.CreateCompanyAsync(null, company2).Wait();
+
+                list = _controller.GetCompaniesForCheck(null);
+                Assert.True(list.Count == 2);
+            }
+            else
+                Assert.True(true);
+
         }
 
         [Fact]
-        public void ProccessTagsTest()
+        public void ProceesTagsTest()
         {
-            var text = _controller.ProccessTags(body,Company2, "The company classified as BAD company");
+            string body = "[BANKCODE][ACCCODE][STATECODE][IBAN][NAME][CONTRACTDATE][NOTE][EMPLOYEE_ID]";
+            var text = _controller.ProccessTags(body, company2, "The company classified as BAD company");
             var etalon = "8888882600000002132456780IBANBadCompany202.05.2020The company classified as BAD company2";
             Assert.Equal(text, etalon);
         }
 
         [Fact]
-        public async Task StoreToStorage()
+        public void IsBadCompany()
         {
-            var record = await _controller.StoreToStorage(null, Company2, "The company classified as BAD company, but...");
-            AssertBadCompanies(BadCompany2, record);
-        }
-
-        [Fact]
-        public void IsBadCompanyTest()
-        {
-            Assert.True(_controller.IsBadCompany(Company2));
-            Assert.False(_controller.IsBadCompany(Company1));
-        }
-
-        private static void AssertBadCompanies(BadCompanyEntity etalon, BadCompanyEntity record)
-        {
-            Assert.NotNull(record);
-            Assert.Equal(etalon.CompanyId, record.CompanyId);
-            Assert.Equal(etalon.Note, record.Note);
+            Assert.True(_controller.IsBadCompany(null, company2));
+            Assert.False(_controller.IsBadCompany(null, company1));
         }
 
 
+        private static void AssertCompanies(CompanyV1 etalon, CompanyV1 company)
+        {
+            Assert.NotNull(company);
+            Assert.Equal(etalon.Name, company.Name);
+            Assert.Equal(etalon.AccCode, company.AccCode);
+            Assert.Equal(etalon.BankCode, company.BankCode);
+            Assert.Equal(etalon.ContractDate, company.ContractDate);
+            Assert.Equal(etalon.ContractNo, company.ContractNo);
+            Assert.Equal(etalon.IBAN, company.IBAN);
+            Assert.Equal(etalon.Id, company.Id);
+            Assert.Equal(etalon.StateCode, company.StateCode);
+            Assert.Equal(etalon.EmployeeId, company.EmployeeId);
+        }
 
+       
     }
 }

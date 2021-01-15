@@ -1,0 +1,30 @@
+version: '3.3'
+
+services:
+  test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    image: ${IMAGE:-test}
+    command: ${TEST_CMD:-bash -c "dotnet test test/Service.Test/Service.Test.csproj"}
+    depends_on:
+      - companies
+    environment:
+      - HOST=companies
+      - PORT=8081
+
+  companies:
+    image: pozhidaev/companies-service:latest
+    links:
+      - mongo
+    environment:
+      - MONGO_ENABLED=true
+      - MONGO_SERVICE_URI=mongodb://mongo:27017/companies
+      - MONGO_COLLECTION=companies
+      - HTTP_PORT=8081
+    ports:
+      - "8081:8081"
+
+
+  mongo:
+    image: mongo:latest

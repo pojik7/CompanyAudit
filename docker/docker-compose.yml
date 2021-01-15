@@ -7,10 +7,10 @@ services:
       - mongo
     environment:
       - MONGO_ENABLED=true
-      - MONGO_SERVICE_URI=mongodb://mongo:27017/bad-companies
+      - MONGO_SERVICE_URI=mongodb://mongo:27017/companies
       - MONGO_COLLECTION=bad-companies
     ports:
-      - "8080:8080"
+      - "8081:8081"
 
   mongo:
     image: mongo:latest
