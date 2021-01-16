@@ -1,5 +1,6 @@
 ﻿using Client.Clients.Version1;
 using Companies.Data.Version1;
+using CompaniesAudit.Logic;
 using PipServices3.Commons.Config;
 using PipServices3.Commons.Refer;
 using PipServices3.Commons.Run;
@@ -14,6 +15,7 @@ namespace Service.Logic
     public class CompaniesAuditController : IOpenable, IClosable, IConfigurable, IReferenceable
     {                
         private ICompaniesClientV1 _companiesClient;
+        public ISendMessageHelper _sendMessageClient;
         private FixedRateTimer Timer { get; set; } = new FixedRateTimer();
         private Parameters Parameters { get; set; } = new Parameters();
         private readonly CompositeLogger _logger = new CompositeLogger();
@@ -24,13 +26,18 @@ namespace Service.Logic
         private string subj;
         private string body;
         int interval;
-        int delay;        
+        int delay;
+
+        public CompaniesAuditController()
+        {
+            _sendMessageClient = new SendMessageByEmailHelper();
+        }
 
         public void SetReferences(IReferences references)
         {
             _logger.SetReferences(references);
             _companiesClient = references.GetOneRequired<ICompaniesClientV1>(
-                new Descriptor("companies-service", "client", "*", "*", "1.0"));              
+                new Descriptor("companies-service", "client", "*", "*", "1.0"));            
         }
 
         public void Configure(ConfigParams config)
@@ -71,9 +78,9 @@ namespace Service.Logic
             AuditTask(correlationId);
         }
         
-        private void AuditTask(string correlationId)
+        private async void AuditTask(string correlationId)
         {
-            var list = GetCompaniesForCheck(correlationId);
+            var list = await GetCompaniesForCheckAsync(correlationId);
             foreach (var company in list)
             {
                 if (IsBadCompany(correlationId, company))
@@ -83,11 +90,10 @@ namespace Service.Logic
             }
         }
 
-        public List<CompanyV1> GetCompaniesForCheck(string correlationId)
+        public async Task<List<CompanyV1>> GetCompaniesForCheckAsync(string correlationId)
         {
-            var task = _companiesClient.GetCompaniesAsync(correlationId, new PipServices3.Commons.Data.FilterParams(), new PipServices3.Commons.Data.PagingParams(), new PipServices3.Commons.Data.SortParams());
-            task.Wait();
-            return task.Result.Data;
+            var page = await _companiesClient.GetCompaniesAsync(correlationId, new PipServices3.Commons.Data.FilterParams(), new PipServices3.Commons.Data.PagingParams(), new PipServices3.Commons.Data.SortParams());
+            return page.Data ?? null;
         }
 
         public bool IsBadCompany(string correlationId, CompanyV1 company)
@@ -95,43 +101,9 @@ namespace Service.Logic
             return company.Name.ToLower().ToLower().Contains("bad");
         }
 
-        private void DoTheBadThings(string correlationId, CompanyV1 company, string Note)
+        public string DoTheBadThings(string correlationId, CompanyV1 company, string Note)
         {
-            SendEmail(company, Note);
-        }
-
-        private void SendEmail(CompanyV1 Company, string Note)
-        {
-            body = ProccessTags(body, Company, Note);
-            SmtpClient client = new SmtpClient(host);
-            MailAddress from = new MailAddress(fromAddress, fromAddress, System.Text.Encoding.UTF8);
-            MailAddress to = new MailAddress(toAddress);
-            MailMessage message = new MailMessage(from, to);
-            message.Body = body;
-            message.Subject = subj;
-            message.SubjectEncoding = System.Text.Encoding.UTF8;
-            string token = "token";
-            client.SendAsync(message, token);
-            message.Dispose();
-
-        }
-
-        private void ShowMessage(CompanyV1 Company, string Note)
-        {
-            body = ProccessTags(body, Company, Note);
-            Console.WriteLine(body);
-        }
-
-        public string ProccessTags(string body,CompanyV1 BadCompany, string Note)
-        {
-            return body.Replace("[BANKCODE]", BadCompany.BankCode).
-                Replace("[ACCCODE]", BadCompany.AccCode).
-                Replace("[STATECODE]", BadCompany.StateCode).
-                Replace("[IBAN]", BadCompany.IBAN).
-                Replace("[NAME]", BadCompany.Name).
-                Replace("[CONTRACTDATE]", BadCompany.ContractDate.ToString("dd.MM.yyyy")).
-                Replace("[NOTE]", Note).
-                Replace("[EMPLOYEE_ID]", BadCompany.EmployeeId.ToString());
-        }   
+            return _sendMessageClient.SendEmail(company, host, fromAddress, toAddress, subj, body, Note);
+        }       
     }
 }

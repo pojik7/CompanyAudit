@@ -1,5 +1,6 @@
 ﻿using Client.Clients.Version1;
 using Companies.Data.Version1;
+using CompaniesAudit.Logic;
 using PipServices3.Commons.Config;
 using PipServices3.Commons.Refer;
 using Service.Logic;
@@ -9,7 +10,7 @@ using Xunit;
 
 namespace Service.Test.Logic
 {
-    public class CompaniesAuditControllerTest
+    public class CompaniesAuditControllerTest: IDisposable
     {        
         CompanyV1 company1 = new CompanyV1()
         {
@@ -38,7 +39,7 @@ namespace Service.Test.Logic
         };
 
         private CompaniesAuditController _controller;
-        private CompaniesHttpClientV1 _client;
+        private CompaniesHttpClientV1 _client;        
         private bool isIntegratedTestEnable;
 
         public CompaniesAuditControllerTest()
@@ -53,15 +54,21 @@ namespace Service.Test.Logic
                     "connection.host", Environment.GetEnvironmentVariable("HOST"),
                     "connection.port", Environment.GetEnvironmentVariable("PORT"),
                     "connection.protocol", "http"
-                ));           
+                ));
+
+            _controller.Configure(ConfigParams.FromTuples(
+                    "mailsettings.body", "[BANKCODE][ACCCODE][STATECODE][IBAN][NAME][CONTRACTDATE][NOTE][EMPLOYEE_ID]"
+                ));
 
 
             var references = References.FromTuples(
                 new Descriptor("companies-audit", "controller", "default", "*", "1.0"), _controller,
-                new Descriptor("companies-service", "client", "http", "default", "1.0"), _client
+                new Descriptor("companies-service", "client", "http", "default", "1.0"), _client                                                
             );
                         
             _controller.SetReferences(references);
+
+            _controller._sendMessageClient = new SendMessageNullHelper();
 
             _client.OpenAsync(null).Wait();
 
@@ -76,14 +83,14 @@ namespace Service.Test.Logic
                 Console.WriteLine(Environment.GetEnvironmentVariable("PORT"));
                 await _client.CreateCompanyAsync(null, company1);
 
-                var list = _controller.GetCompaniesForCheck(null);
+                var list = await _controller.GetCompaniesForCheckAsync(null);
 
                 Assert.True(list.Count == 1);
                 AssertCompanies(company1, list[0]);
 
                 await _client.CreateCompanyAsync(null, company2);
 
-                list = _controller.GetCompaniesForCheck(null);
+                list = await _controller.GetCompaniesForCheckAsync(null);
                 Assert.True(list.Count == 2);
             }
             else
@@ -92,10 +99,9 @@ namespace Service.Test.Logic
         }
 
         [Fact]
-        public void ProceesTagsTest()
-        {
-            string body = "[BANKCODE][ACCCODE][STATECODE][IBAN][NAME][CONTRACTDATE][NOTE][EMPLOYEE_ID]";
-            var text = _controller.ProccessTags(body, company2, "The company classified as BAD company");
+        public void SendMail()
+        {            
+            var text = _controller.DoTheBadThings(null,company2, "The company classified as BAD company");
             var etalon = "8888882600000002132456780IBANBadCompany202.05.2020The company classified as BAD company2";
             Assert.Equal(text, etalon);
         }
@@ -122,6 +128,9 @@ namespace Service.Test.Logic
             Assert.Equal(etalon.EmployeeId, company.EmployeeId);
         }
 
-       
+        public void Dispose()
+        {
+            _client.CloseAsync(null).Wait();
+        }
     }
 }
