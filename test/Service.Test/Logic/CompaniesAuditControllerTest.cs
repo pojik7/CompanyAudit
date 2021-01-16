@@ -71,7 +71,9 @@ namespace Service.Test.Logic
         public void GetCompaniesForCheck()
         {
             if (isIntegratedTestEnable)
-            {                                
+            {
+                Console.WriteLine(Environment.GetEnvironmentVariable("HOST"));
+                Console.WriteLine(Environment.GetEnvironmentVariable("PORT"));
                 _client.CreateCompanyAsync(null, company1).Wait();
 
                 var list = _controller.GetCompaniesForCheck(null);
