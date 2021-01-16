@@ -50,9 +50,9 @@ namespace Service.Test.Logic
 
             _client = new CompaniesHttpClientV1();
             _client.Configure(ConfigParams.FromTuples(
-                    ("connection.host", Environment.GetEnvironmentVariable("HOST")),
-                    ("connection.port", Environment.GetEnvironmentVariable("PORT")),
-                    ("connection.protocol", "http")
+                    "connection.host", Environment.GetEnvironmentVariable("HOST"),
+                    "connection.port", Environment.GetEnvironmentVariable("PORT"),
+                    "connection.protocol", "http"
                 ));           
 
 
@@ -68,20 +68,20 @@ namespace Service.Test.Logic
         }
          
         [Fact]
-        public void GetCompaniesForCheck()
+        public async void GetCompaniesForCheckAsync()
         {
             if (isIntegratedTestEnable)
             {
                 Console.WriteLine(Environment.GetEnvironmentVariable("HOST"));
                 Console.WriteLine(Environment.GetEnvironmentVariable("PORT"));
-                _client.CreateCompanyAsync(null, company1).Wait();
+                await _client.CreateCompanyAsync(null, company1);
 
                 var list = _controller.GetCompaniesForCheck(null);
 
                 Assert.True(list.Count == 1);
                 AssertCompanies(company1, list[0]);
 
-                _client.CreateCompanyAsync(null, company2).Wait();
+                await _client.CreateCompanyAsync(null, company2);
 
                 list = _controller.GetCompaniesForCheck(null);
                 Assert.True(list.Count == 2);
